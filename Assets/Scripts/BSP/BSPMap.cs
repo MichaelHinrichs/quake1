@@ -8,19 +8,18 @@ public class BSPMap
     private BinaryReader bspFile;
 
     public BSPHeader header;
+    public List<BSPEntity> entities;
+    public List<BSPPlane> planes;
     public List<Vector3> vertices;
+    public List<BSPNode> nodes;
+    public List<BSPTexture> textures;
+    public List<BSPTextureSurface> textureSurfaces;
     public List<BSPFace> faces;
     public List<int> faceList;
+    public List<BSPLeaf> leaves;
     public List<BSPEdge> edges;
     public List<int> edgeList;
     public List<BSPModel> models;
-    public List<BSPTexture> textures;
-    public List<BSPTextureSurface> textureSurfaces;
-    public List<BSPEntity> entities;
-    public List<BSPNode> nodes;
-    public List<BSPPlane> planes;
-    public List<BSPLeaf> leaves;
-
     private BSPPalette palette;
 
     public BSPMap( string mapFileName )
@@ -31,16 +30,89 @@ public class BSPMap
 
         LoadEntities( bspFile );
         LoadPlanes( bspFile );
-        LoadTextures( bspFile );
         LoadVertices( bspFile );
         LoadNodes( bspFile );
+        LoadTextures( bspFile );
         LoadTextureInfo( bspFile );
-        LoadLeaves( bspFile );
         LoadFaces( bspFile );
+        LoadLeaves( bspFile );
         LoadEdges( bspFile );
         LoadModels( bspFile );
       
         bspFile.Close();
+    }
+	
+    private void LoadEntities( BinaryReader bspFile )
+    {
+        entities = new List<BSPEntity>();
+
+        BSPDirectoryEntry entitiesEntry = header.GetDirectoryEntry( DIRECTORY_ENTRY.ENTITIES );        
+        bspFile.BaseStream.Seek( entitiesEntry.fileOffset, SeekOrigin.Begin );
+
+        string entityText = new string(  bspFile.ReadChars( entitiesEntry.size ) );        
+
+        StringReader reader = new StringReader(entityText);
+        {
+            string line = string.Empty;
+            do
+            {                
+                line = reader.ReadLine();
+                if ( line != null )
+                {
+                    if ( line == "{" )                    
+                        entities.Add( new BSPEntity( reader ) );                    
+                }
+            } while ( line != null );
+        }        
+    }
+
+    private void LoadPlanes(BinaryReader bspFile )
+    {
+        planes = new List<BSPPlane>();
+
+        BSPDirectoryEntry planesEntry = header.GetDirectoryEntry( DIRECTORY_ENTRY.PLANES );
+        long planeCount = planesEntry.size / 20;
+
+        bspFile.BaseStream.Seek(planesEntry.fileOffset, SeekOrigin.Begin);
+
+        for (int i = 0; i < planeCount; i++)        
+            planes.Add( new BSPPlane( bspFile ) );        
+    }
+
+    private void LoadVertices( BinaryReader bspFile )
+    {        
+    	vertices = new List<Vector3>();
+
+		BSPDirectoryEntry verticesEntry = header.GetDirectoryEntry( DIRECTORY_ENTRY.MAP_VERTICES );
+		int vertCount = verticesEntry.size / 12;
+
+		bspFile.BaseStream.Seek( verticesEntry.fileOffset , SeekOrigin.Begin );
+
+		for ( int i = 0; i < vertCount; i++ )
+		{
+            // Read vertex and flip Y/Z to match Quake 1
+            float x = bspFile.ReadSingle();
+            float y = bspFile.ReadSingle();
+            float z = bspFile.ReadSingle();
+
+            vertices.Add( new Vector3( x, z, y ) );
+		}
+    }
+
+    private void LoadNodes( BinaryReader bspFile )
+    {
+        nodes = new List<BSPNode>();
+
+        BSPDirectoryEntry nodesEntry = header.GetDirectoryEntry( DIRECTORY_ENTRY.NODES );
+        int nodeCount = nodesEntry.size / 36;
+
+        bspFile.BaseStream.Seek( nodesEntry.fileOffset, SeekOrigin.Begin );
+
+        for ( int i = 0; i < nodeCount; i++ )
+        {
+            nodes.Add (new BSPNode( bspFile ) );
+        }
+
     }
 
     private void LoadTextures( BinaryReader bspFile )
@@ -108,41 +180,19 @@ public class BSPMap
         }
     }
 
-    private void LoadVertices( BinaryReader bspFile )
-    {        
-    	vertices = new List<Vector3>();
-
-		BSPDirectoryEntry verticesEntry = header.GetDirectoryEntry( DIRECTORY_ENTRY.MAP_VERTICES );
-		int vertCount = verticesEntry.size / 12;
-
-		bspFile.BaseStream.Seek( verticesEntry.fileOffset , SeekOrigin.Begin );
-
-		for ( int i = 0; i < vertCount; i++ )
-		{
-            // Read vertex and flip Y/Z to match Quake 1
-            float x = bspFile.ReadSingle();
-            float y = bspFile.ReadSingle();
-            float z = bspFile.ReadSingle();
-
-            vertices.Add( new Vector3( x, z, y ) );
-		}
-    }
-
-    private void LoadNodes( BinaryReader bspFile )
+    private void LoadLeaves( BinaryReader bspFile )
     {
-        nodes = new List<BSPNode>();
+        leaves = new List<BSPLeaf>();
 
-        BSPDirectoryEntry nodesEntry = header.GetDirectoryEntry( DIRECTORY_ENTRY.NODES );
-        int nodeCount = nodesEntry.size / 36;
+        BSPDirectoryEntry leafEntry = header.GetDirectoryEntry( DIRECTORY_ENTRY.LEAVES );
+        long leafCount = leafEntry.size / 28;
 
-        bspFile.BaseStream.Seek( nodesEntry.fileOffset, SeekOrigin.Begin );
+        bspFile.BaseStream.Seek( leafEntry.fileOffset, SeekOrigin.Begin );
 
-        for ( int i = 0; i < nodeCount; i++ )
-        {
-            nodes.Add (new BSPNode( bspFile ) );
-        }
-
+        for ( int i = 0; i < leafCount; i++ )
+            leaves.Add( new BSPLeaf( bspFile ) );
     }
+	
     private void LoadEdges( BinaryReader bspFile )
     {
         // Edges
@@ -172,7 +222,6 @@ public class BSPMap
         }
     }
 
-
     private void LoadModels( BinaryReader bspFile )
     {
     	models = new List<BSPModel>();
@@ -187,55 +236,5 @@ public class BSPMap
     		BSPModel model = new BSPModel( bspFile );	
     		models.Add( model );
     	}
-    }
-
-    private void LoadLeaves( BinaryReader bspFile )
-    {
-        leaves = new List<BSPLeaf>();
-
-        BSPDirectoryEntry leafEntry = header.GetDirectoryEntry( DIRECTORY_ENTRY.LEAVES );
-        long leafCount = leafEntry.size / 28;
-
-        bspFile.BaseStream.Seek( leafEntry.fileOffset, SeekOrigin.Begin );
-
-        for ( int i = 0; i < leafCount; i++ )
-            leaves.Add( new BSPLeaf( bspFile ) );
-    }
-
-    private void LoadPlanes(BinaryReader bspFile )
-    {
-        planes = new List<BSPPlane>();
-
-        BSPDirectoryEntry planesEntry = header.GetDirectoryEntry( DIRECTORY_ENTRY.PLANES );
-        long planeCount = planesEntry.size / 20;
-
-        bspFile.BaseStream.Seek(planesEntry.fileOffset, SeekOrigin.Begin);
-
-        for (int i = 0; i < planeCount; i++)        
-            planes.Add( new BSPPlane( bspFile ) );        
-    }
-
-    private void LoadEntities( BinaryReader bspFile )
-    {
-        entities = new List<BSPEntity>();
-
-        BSPDirectoryEntry entitiesEntry = header.GetDirectoryEntry( DIRECTORY_ENTRY.ENTITIES );        
-        bspFile.BaseStream.Seek( entitiesEntry.fileOffset, SeekOrigin.Begin );
-
-        string entityText = new string(  bspFile.ReadChars( entitiesEntry.size ) );        
-
-        StringReader reader = new StringReader(entityText);
-        {
-            string line = string.Empty;
-            do
-            {                
-                line = reader.ReadLine();
-                if ( line != null )
-                {
-                    if ( line == "{" )                    
-                        entities.Add( new BSPEntity( reader ) );                    
-                }
-            } while ( line != null );
-        }        
     }
 }
